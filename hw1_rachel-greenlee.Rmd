@@ -1,0 +1,201 @@
+---
+title: "HW1 DATA 622"
+author: "Rachel Greenlee"
+date: "3/11/2022"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    code_folding: show
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+```{r}
+#prevent conflict with skimr and dlookr
+options(kableExtra.auto_format = FALSE)
+
+library(skimr)
+library(tidyverse)
+library(lubridate)
+library(rpart) #decision tree package rec'd by Practical ML in R textbook
+library(rpart.plot) #decision tree display package rec'd by Practical ML in R textbook
+```
+
+
+# Assignment Prompt
+
+#### (a) Visit the following website and explore the range of sizes of this dataset (from 100 to 5 million records). Based on your computer's capabilities (memory, CPU), select 2 files you can handle (recommended one small, one large)  
+
+https://eforexcel.com/wp/downloads-18-sample-csv-files-data-sets-for-testing-sales/
+
+Below I chose the 1,000 sales file as my `small_sales` and the 50,000 as my `big_sales`.
+
+```{r}
+small_sales <- read.csv("sales_1000.csv")
+
+big_sales <- read.csv("sales_50000.csv")
+
+
+#convert two date variables from factor to date in both df
+small_sales$Order.Date <- mdy(small_sales$Order.Date)
+small_sales$Ship.Date <- mdy(small_sales$Ship.Date)
+
+big_sales$Order.Date <- mdy(big_sales$Order.Date)
+big_sales$Ship.Date <- mdy(big_sales$Ship.Date)
+
+```
+
+
+
+
+#### (b) Review the structure and content of the tables, and think which two machine learning algorithms presented so far could be used to analyze the data, and how can they be applied in the suggested environment of the datasets. Write a short essay explaining your selection. 
+
+Taking a look at a `skim()` of the `big_sales` table, which has the same variables as `small_sales`, I first see we have 14 variables. There are 7 numeric, 5 character type variable of which some may be useful to recode as factors, and two variables I've already recoded at date type. Wonderfully, there is no missing data across the enter dataframe. The dates of this `big_sales` dataframe run from the started of 2010 to mid 2017.  
+
+
+```{r}
+skim(big_sales)
+```
+
+For the sake of this assignment I'm going to imagine that a new system wants to be able to automatically assign a new order with the appropriate `Order.Priority`, which currently has 4 levels. Theoretically, I could imagine that certain `Item.Type` as well as the `Units.Sold` or `Total.Revenue` might factor in to how high of a priority an order should be given. Further it's possible that what is considered high or low priority may change across time in which case the `Order.Date` or `Ship.Date` may be helpful in determining the `Order.Priority` - we will need to explore all of these possibilities.  
+
+**Which of the four `Order.Priority` levels should be assigned to each case of test data?** With my goal identified I need to consider what machine learning method to use. As our target variable is categorical with 4 levels this restricts our options to some degree. I'll choose not to pursue a *logistic regression* model as I'd anticipate issues with the multicollinearity that my variables certainly have due to the context of the dataset. A *k-NN* model may be a good approach as it makes no assumptions about the underlying data distribution, which is useful in this case as the data is completely randomized anyhow. Further, k-NN cannot handle missing data and thankfully this dataset has no missing values. However, k-NN cannot handle nominal data, which we have in the `Region`, `Country`, `Item.Type`, and `Sales.Channel` variables, and further it cannot handle outliers which we may have due to the randomly generated dataset.  
+
+Two of my potentially better options are *Naive Bayes classifier* and *Decision Trees*. The Naive Bayes classifier isn't quite a good fit, as it doesn't generally work well with datasets with a large amount of continuous variables, which we have with our `Units.Sold`, `Unit.Price`, `Unit.Cost`, `Total.Revenue`, `Total.Cost`, and `Total.Profit` variables. Further, Naive Bayes classifier assumes that all features within a class are not only independent, but are also equally important. That might not be the case with our data, and I'd rather have a method that determines the important features for me.  
+
+With all of that in mind, I choose to explore using decision trees to predict `Order.Priority`. Decision trees can handle both discrete and continuous variables, will not be negatively impacted by any outliers created by the random generation of this dataset, and generally function well on both small and large datasets. Further, as a nonparametric model this method does not make any assumptions about the form of the data, which is ideal in our case due again to the random nature of the data. Personally, I've never coded a decision tree model and look forward to walking through the process of growing than pruning the model.
+
+
+
+
+
+
+#### (c) Then, select one of the 2 algorithms and explore how to analyze and predict an outcome based on the data available. This will be an exploratory exercise, so feel free to show errors and warnings that raise during the analysis. Test the code with both datasets selected and compare the results. Which result will you trust if you need to make a business decision? Do you think an analysis could be prone to errors when using too much data, or when using the least amount possible? 
+
+As mentioned above I will proceed with building a decision tree model to predict `Order.Priority` from the other variables. I'll do this first on the larger dataset, and then again on the smaller dataset.  
+
+In the code below I recode the character variables as factors, set a random seed and create a training and test dataset with a 75/25 split. Next I check the class distribution and see that in the original dataset and in the training and test datasets roughly 25% of each of the 4 `Order.Priority` levels are present so there is no class imbalance. (If there were, I'd consider using the SMOTE() function from the DMwR package.)
+
+```{r}
+#recode character variables to factors
+small_sales$Region <- as.factor(small_sales$Region)
+small_sales$Item.Type <- as.factor(small_sales$Item.Type)
+small_sales$Sales.Channel <- as.factor(small_sales$Sales.Channel)
+small_sales$Order.Priority <- as.factor(small_sales$Order.Priority)
+
+#split into test/train set
+set.seed(3190)
+sample_set <- sample(nrow(small_sales), round(nrow(small_sales)*0.75), replace = FALSE)
+small_sales_train <- small_sales[sample_set, ]
+small_sales_test <- small_sales[-sample_set, ]
+
+#check class distribution of original, train, and test sets
+round(prop.table(table(select(small_sales, Order.Priority), exclude = NULL)), 4) * 100
+round(prop.table(table(select(small_sales_train, Order.Priority), exclude = NULL)), 4) * 100
+round(prop.table(table(select(small_sales_test, Order.Priority), exclude = NULL)), 4) * 100
+
+
+```
+
+Next I build the model using the `rpart` package and display the visual of the decision tree. There are two many factor levels on `Country` for the code to run on my PC, so I exclude it.
+
+```{r}
+#build model via rpart package
+small_sales_model <- rpart(Order.Priority ~ . -Country,
+                         method = "class",
+                         data = small_sales_train
+                          )
+
+#display decision tree
+rpart.plot(small_sales_model)
+```
+
+To see how this tree is performing we can calculate how accurate it is on predicting the testing dataset. The table is displayed below and ultimately the accuracy is 26.4%. Not so great - but considering the data is random there may be no underlying patterns to identify.
+
+```{r}
+small_sales_pred <- predict(small_sales_model, small_sales_test, type = "class")
+small_sales_pred_table <- table(small_sales_test$Order.Priority, small_sales_pred)
+small_sales_pred_table
+
+#calculate accuracy
+sum(diag(small_sales_pred_table)) / nrow(small_sales_test)
+```
+
+
+
+Performing the same code but with regard to the larger dataset, with 50,000 instead 1,000 values, lets see if the accuracy will be any better despite the randomly generated data. Again we see the class distribution appears to be balanced, with around 25% of each of the 4 priority levels present.
+
+```{r}
+#recode character variables to factors
+big_sales$Region <- as.factor(big_sales$Region)
+big_sales$Item.Type <- as.factor(big_sales$Item.Type)
+big_sales$Sales.Channel <- as.factor(big_sales$Sales.Channel)
+big_sales$Order.Priority <- as.factor(big_sales$Order.Priority)
+
+#split into test/train set
+set.seed(3190)
+sample_set <- sample(nrow(big_sales), round(nrow(big_sales)*0.75), replace = FALSE)
+big_sales_train <- big_sales[sample_set, ]
+big_sales_test <- big_sales[-sample_set, ]
+
+#check class distribution of original, train, and test sets
+round(prop.table(table(select(big_sales, Order.Priority), exclude = NULL)), 4) * 100
+round(prop.table(table(select(big_sales_train, Order.Priority), exclude = NULL)), 4) * 100
+round(prop.table(table(select(big_sales_test, Order.Priority), exclude = NULL)), 4) * 100
+
+
+```
+
+Next I build the model and plot it, but only receive a single node. The `rpart` package documentation says, "Any split that does not decrease the overall lack of fit by a factor of cp is not attempted" so I presume that is the case with this totally random data. 
+
+```{r}
+#build model via rpart package
+big_sales_model <- rpart(Order.Priority ~ . -Country,
+                         method = "class",
+                         data = big_sales_train
+                          )
+
+#display decision tree
+rpart.plot(big_sales_model, box.palette = "blue")
+```
+
+I found some arguments I can give to the function to loosen the criteria for what deserves to be made into a split, and get a tree with more nodes - though it likely isn't meaningful.
+
+```{r}
+#build model via rpart package
+big_sales_model <- rpart(Order.Priority ~ . -Country,
+                         method = "class",
+                         data = big_sales_train,
+                         control=rpart.control(minsplit=2, minbucket=1, cp=0.001)
+                          )
+
+#display decision tree
+rpart.plot(big_sales_model)
+
+
+```
+
+As I did before, I can generate the prediction table and calculate the accuracy on the test set, which is 25% again. Considering there are 4 levels of `Order.Priority` this means our decision tree, both the small and large ones, perform no better than chance guessing (1/4 change to guess the right priority level).
+
+
+```{r}
+big_sales_pred <- predict(big_sales_model, big_sales_test, type = "class")
+big_sales_pred_table <- table(big_sales_test$Order.Priority, big_sales_pred)
+big_sales_pred_table
+
+#calculate accuracy
+sum(diag(big_sales_pred_table)) / nrow(big_sales_test)
+```
+
+#### Final Thoughts
+
+It is hard to say I trust either of these algorithms or predictions as the data is random and cannot be trusted for any patterns that are found. However, in general as our textbook states, a strength of decision trees is that they are useful on both small and large datasets - however they will improve as they have more and more examples to learn from. From what I've learned so far most models learn best with more data available, provided that data is clean and accurate, and that it doesn't add too much to the computing load. 
+
+
+
+
