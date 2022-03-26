@@ -1,0 +1,143 @@
+---
+title: "HW2 DATA 622"
+author: "Rachel Greenlee"
+date: "3/26/2022"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    code_folding: show
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+```{r}
+#prevent conflict with skimr and dlookr
+options(kableExtra.auto_format = FALSE)
+
+library(skimr)
+library(tidyverse)
+library(lubridate)
+library(rpart) #decision tree package rec'd by Practical ML in R textbook
+library(rpart.plot) #decision tree display package rec'd by Practical ML in R textbook
+library(randomForest) #for random forest modeling
+library(caret) #for confusionMatrix()
+
+
+```
+
+
+
+
+# Assignment Prompt 
+
+### (a) Based on the latest topics presented, bring a dataset of your choice and create a Decision Tree where you can solve a classification or regression problem and predict the outcome of a particular feature or detail of the data used.
+
+I'm choosing to use a dataset showing the relationship between physiological parameters and stress level of an individual from Kaggle. The direct link to the dataset is below:  
+
+https://www.kaggle.com/datasets/laavanya/stress-level-detection?select=Stress-Lysis.csv
+
+This is a dataset with 2001 cases and 4 variables. There are 3 variables I've imported as numeric: `humidity`, `temp`, and `steps` - these are relevant to the individuals. There are no missing values. I've imported my target variable, `stress_lvl` as a factor and it has three levels that correspond to low (0), medium (1), and high (2).  
+
+All appear to be reasonable distributed from looking at the percentiles.I note that an average humdity value is 20, average temp is 89, and average steps are about 100.
+
+```{r}
+stress <- read.csv("stress.csv", 
+                 col.names = c("humidity", "temp", "steps", "stress_lvl"),
+                 colClasses = c("numeric", "numeric", "numeric", "factor"))
+
+skim(stress)
+
+```
+
+
+
+Before we begin modeling I will split this dataset into a test/train set and check the class distribution of my target variable `stress_lvl`.
+
+```{r}
+#split into test/train set
+set.seed(3190)
+sample_set <- sample(nrow(stress), round(nrow(stress)*0.75), replace = FALSE)
+stress_train <- stress[sample_set, ]
+stress_test <- stress[-sample_set, ]
+```
+
+
+Checking the class proportion tables bth the training and testing dataset seem to have roughly the same proportion of stress levels as the original data, so I can proceed with model building.
+
+```{r}
+round(prop.table(table(select(stress, stress_lvl), exclude = NULL)), 4) * 100
+
+```
+
+
+```{r}
+round(prop.table(table(select(stress_train, stress_lvl), exclude = NULL)), 4) * 100
+```
+
+```{r}
+round(prop.table(table(select(stress_test, stress_lvl), exclude = NULL)), 4) * 100
+
+```
+
+
+
+
+### (b) Switch variables to generate 2 decision trees and compare the results. 
+
+First I'll attempt making a model to predict the `stress_lvl` based on all 3 of the predictive variables. From the plot it appears that `humidity` is the largest predictor, where a `humidity` measure of less than 15 means the low (0) stress level, between 15-23 is the medium (1) level, and greater than 23 is the high (2) stress level. It appears the other variables weren't even necessary to build decision tree.
+
+```{r}
+
+#build model via rpart package
+stress_model_stress_lvl <- rpart(stress_lvl ~ .,
+                         method = "class",
+                         data = stress_train
+                          )
+
+#display decision tree
+rpart.plot(stress_model_stress_lvl)
+```
+
+Out of curiousity, and to create a second decision tree as required, I'll make another tree but this time be explicity about only using the `temp` and `steps` variables as predictors. In this case, `temp` appears to be the next most valuable predictor, as the `steps` predictor didn't even make it into the tree. A temperature of less than 84 is predicted to be the low stress level, from 84-92 the medium stress level, and greater than 92 results in the high stress level.
+
+```{r}
+
+#build model via rpart package
+stress_model_tree2 <- rpart(stress_lvl ~ temp + steps,
+                            data = stress_train
+                          )
+
+#display decision tree
+rpart.plot(stress_model_tree2)
+
+```
+
+
+
+
+
+### (c) Create a random forest for regression and analyze the results.
+
+The Random Forest below is built to predict the `stress_level` based off of the 3 predictor variables. Predicting values for the test set and looking at the confusion matrix it appears the Random Forest can predict with 100% accuracy. This isn't surprising as the data is likely highly correlated, which makes sense with the subject matter. Physical factors in the body both cause and indicate high stress levels.
+
+
+```{r}
+stress_model_forest <- randomForest(stress_lvl ~ .,
+                                    data = stress_train)
+
+forest_pred <- predict(stress_model_forest, stress_test)
+
+confusionMatrix(forest_pred, stress_test$stress_lvl)
+
+```
+
+
+
+### (d) Based on real cases where desicion trees went wrong, and 'the bad & ugly' aspects of decision trees (https://decizone.com/blog/the-good-the-bad-the-ugly-of-using-decision-trees), how can you change this perception when using the decision tree you created to solve a real problem?
+
+In reading this article and thinking about the dataset I chose, I find the decision trees most helpful in this case. Because the data was very simple, had few variables, and was highly correlated - it was most valuable to learn that humidity was the biggest predictor of stress level, and to see those cut-off levels of humidity that corresponded to the low, medium, and high stress levels.
