@@ -1,0 +1,93 @@
+---
+title: "HW3 DATA 622"
+author: "Rachel Greenlee"
+date: "4/16/2022"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    code_folding: show
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+```{r}
+library(tidyverse)
+library(e1071) #package with svm()
+library(caret)
+
+```
+
+
+
+# Assignment Prompt 
+
+### (a) Perform an analysis of the dataset used in Homework #2 using the SVM algorithm.Compare the results with the results from previous homework.
+
+Preparing the dataset exactly as I did in HW2.
+
+
+```{r}
+stress <- read.csv("stress.csv", 
+                 col.names = c("humidity", "temp", "steps", "stress_lvl"),
+                 colClasses = c("numeric", "numeric", "numeric", "factor"))
+
+#split into test/train set
+set.seed(3190)
+sample_set <- sample(nrow(stress), round(nrow(stress)*0.75), replace = FALSE)
+stress_train <- stress[sample_set, ]
+stress_test <- stress[-sample_set, ]
+
+
+```
+
+
+Building the SVM model, which is based on 3 predictor variables and is thus challenging to represent graphically.
+
+```{r}
+
+svm_model <- svm(stress_lvl ~ ., data = stress_train, type = 'C-classification', kernel = "linear")
+
+print(svm_model)
+
+```
+Next I store the predictions and test against the test st of the stress data. It appears there is 99.8% accuracy. Previously the Random Forest model had an accuracy of 100% so that one is technically best, however this data is so clearly related the models used here are more complex than necessary - though a good practice.
+
+```{r}
+test_pred <- predict(svm_model, newdata = stress_test)
+
+confusionMatrix(table(test_pred, stress_test$stress_lvl))
+```
+
+
+
+
+
+### (b) Search for academic content (at least 3 articles) that compare the use of decision trees vs SVMs in your current area of expertise.
+
+An example of SVM vs Decision Tree classification with regard to image (geographic) classification. In this case the SVM Radial Basis function had the highest accuracy.  
+https://scialert.net/fulltext/?doi=itj.2009.64.70
+
+A paper (dated, 2003) on SVM vs Decision Trees with regard to classifying gene expression. In this case the accuracy was very close when the researchers used less than 50% of the data for a training set, with bagging and boosting sometimes outpacing SVMs. Interestingly, as the training set size increased, the accuracy of the SVM models kept improving while the decision trees did not and actually began to overfit.
+https://www.aaai.org/Papers/FLAIRS/2003/Flairs03-019.pdf
+
+A paper attempting to predict student performance, which used 7 variables (GPA, major, type_of_school, etc.) compared KNN, SVM, and Decision Tree models. After tuning each model appropriately they could SVM had a 95% accuracy as compared to the Decision Tree's 93% accuracy. Looking deeper, the Decision Tree actually had the best accuracy for one specific classifier, for non-active students. These were all within 1% of the SVM model though, so the authors chose to proceed with SVM's better overall accuracy.  
+https://pdfs.semanticscholar.org/c50b/3969d9a84ec1cc756bb10f057087a6e7060e.pdf
+
+
+
+
+
+### (c) Which algorithm is recommended to get more accurate results? Is it better for classification or regression scenarios? Do you agree with the recommendations? Why?
+
+From the examples linked and summarized above it seems that in practice it is far more likely that SVM and Decision Trees are used for classification scenarios. I found the second paper most interesting, as they discussed how the SVM model gained more accuracy as more data was made available, while that wasn't the case for their Decision Tree. This suggests that it's likely best to try numerous models, within reason, as there won't always be an obvious choice for your data. It could depend on things like the size of the training data that are quite fluid. While all models have strengths and weaknesses, these aren't set in stone. A good data science should understand enough of the underpinnings of a model to know when it is and isn't appropriate to use it for a specific dataset, and to also know how to tune the model and avoid overfitting.
+
+
+
+
+
+
