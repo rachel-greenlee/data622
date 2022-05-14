@@ -1,0 +1,168 @@
+---
+title: "HW4 DATA 622"
+author: "Rachel Greenlee"
+date: "5/14/2022"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    code_folding: show
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+```{r}
+options(kableExtra.auto_format = FALSE)
+library(tidyverse)
+library(skimr)
+library(dlookr)
+library(class) #for knn()
+library(flextable)
+library(fastDummies)
+
+
+##making theme
+mpeach <- "#fbaa82"
+mteal <- "#73a2ac"
+mdarkteal <- "#0b5d69"
+mgray <- "#4c4c4c"
+
+# set plot theme for assignment
+my_plot_theme <- list(
+  theme_classic() +
+  theme(plot.background = element_rect(fill = "#F3F2E8"),
+        panel.background = element_rect(fill = "#F3F2E8"),
+        panel.grid.major.x = element_line(color = "white"),
+        axis.title.y = element_text(face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        text = element_text(size = 20)))
+
+
+```
+
+# Assignment Prompt 
+
+You get to decide which dataset you want to work on. The data set must be different from the ones used in previous homeworks You can work on a problem from your job, or something you are interested in. You may also obtain a dataset from sites such as Kaggle, Data.Gov, Census Bureau, USGS or other open data portals. 
+Select one of the methodologies studied in weeks 1-10, and one methodology from weeks 11-15 to apply in the new dataset selected. To complete this task:. 
+- describe the problem you are trying to solve.
+- describe your datases and what you did to prepare the data for analysis. 
+- methodologies you used for analyzing the data
+- what's the purpose of the analysis performed
+- make your conclusions from your analysis. Please be sure to address the business impact (it could be of any domain) of your solution.
+
+# Introduction
+
+
+https://www.kaggle.com/datasets/uciml/mushroom-classification?resource=download&select=mushrooms.csv
+
+
+# Data Prep & Exploration
+
+I read in the data, set the appropriate class types, and look at a summary of the data. As this dataset has already been prepped for classification machine learning projects, there is no missing data. Further, since there is no numeric data I don't have to worry about extreme outliers or non-normal distributions.
+
+```{r}
+# load in data with default class type of 'factor', except for bruises which is a logical 
+mushrooms <- read_csv("mushrooms.csv", col_types = cols(.default = "f", bruises = "l"))
+
+#produce table summary  
+skim(mushrooms)
+```
+
+Looking at the histograms for each variable we see the distribution of the levels within each variable. For our target variable `class` it appears there is a roughly equal amount in each level. A few variables have near-zero variance, such as gill-attachment, ring-number, and viel-number.
+
+```{r, fig.height=14}
+mushrooms %>%
+  gather() %>% 
+  ggplot(aes(value)) +
+  geom_histogram(stat = "count", fill = "#73a2ac") +
+  facet_wrap(~ key, scales = "free", ncol = 4) +
+  labs(title = "Checking Distribution of Numeric Predictor Variables") + 
+  my_plot_theme
+```
+
+Next I split the data into a train and test set, and prepare my number of cross validation folds at the standard of 10.
+
+```{r}
+mushrooms_dummies <- dummy_cols(mushrooms,  select_columns = c('cap-shape', 'cap-surface', 'cap-color', 'odor', 'gill-attachment', 'gill-spacing', 'gill-size', 'gill-color', 'stalk-shape', 'stalk-root', 'stalk-surface-above-ring', 'stalk-surface-below-ring', 'stalk-color-above-ring', 'stalk-color-below-ring', 'veil-type', 'veil-color', 'ring-number', 'ring-type', 'spore-print-color', 'population', 'habitat'), 
+           remove_selected_columns = TRUE)
+
+
+set.seed(2911)
+
+
+sample_index <- sample(nrow(mushrooms_dummies), round(nrow(mushrooms_dummies)*.75), replace = FALSE)
+
+# create train and test sets from split
+train <- mushrooms_dummies[sample_index, ]
+test <- mushrooms_dummies[-sample_index, ]
+
+
+
+
+
+```
+
+
+# KNN Modeling
+
+
+
+```{r}
+
+#for KNN function later
+train_labels <- as.factor(pull(train, class))
+test_labels <- as.factor(pull(test, class))
+
+# remove target variable
+train <- data.frame(select(train, -class))
+test <- data.frame(select(test, -class))
+
+
+
+knn_pred <- knn(
+  train = train,
+  test = test,
+  cl = train_labels,
+  k = 5)
+```
+
+
+```{r}
+mush_pred_table <- table(test_labels, knn_pred)
+mush_pred_table
+```
+
+
+
+# PCA Modeling
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
